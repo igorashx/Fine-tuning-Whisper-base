@@ -61,6 +61,13 @@ $Env:MOZILLA_DATA_COLLECTIVE_API_KEY = "<cheia-ta-api>"
 ```powershell
 & "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" run_pipeline.py --dataset-cache-dir "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/datasets" --freeze-encoder
 ```
+sau pentru cell din colab
+```powershell
+!MOZILLA_DATA_COLLECTIVE_API_KEY="95c0da9d9d3e5c78ca2452db640312f39e69efe82d9cc4cfbbf074f1ee1d45ed" python run_pipeline.py \
+  --dataset-cache-dir "/content/artifacts/datasets" \
+  --freeze-encoder \
+  --fp16
+```
 
 Adaugă `--fp16` doar când rulezi pe GPU compatibil, de exemplu în Colab.
 
