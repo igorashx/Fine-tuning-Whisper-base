@@ -1,32 +1,20 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 from pathlib import Path
 
 import torch
-from datasets import Dataset
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 from asr_ro.audio_loading import load_audio_sample
 from asr_ro.metrics import summarize_metrics
-
-
-def read_manifest(csv_path: Path, limit: int | None = None) -> Dataset:
-    with csv_path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        rows = []
-        for row in reader:
-            rows.append(row)
-            if limit is not None and len(rows) >= limit:
-                break
-    return Dataset.from_list(rows)
+from asr_ro.training_dataset import read_manifest_rows
 
 
 def transcribe_dataset(
     model_name_or_path: str,
-    dataset: Dataset,
+    rows: list[dict[str, str]],
     device: str,
     batch_size: int = 4,
 ) -> list[str]:
@@ -39,9 +27,9 @@ def transcribe_dataset(
     model.eval()
 
     predictions: list[str] = []
-    for batch_start in range(0, len(dataset), batch_size):
-        batch = dataset[batch_start : batch_start + batch_size]
-        audio_items = [load_audio_sample(path) for path in batch["audio_path"]]
+    for batch_start in range(0, len(rows), batch_size):
+        batch_rows = rows[batch_start : batch_start + batch_size]
+        audio_items = [load_audio_sample(row["audio_path"]) for row in batch_rows]
         arrays = [item["array"] for item in audio_items]
         sampling_rate = audio_items[0]["sampling_rate"]
         features = processor.feature_extractor(arrays, sampling_rate=sampling_rate, return_tensors="pt")
@@ -60,11 +48,11 @@ def compare_models(
     batch_size: int,
 ) -> dict[str, object]:
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    dataset = read_manifest(test_csv, limit=limit)
-    references = dataset["text"]
+    rows = read_manifest_rows(test_csv, limit=limit)
+    references = [row["text"] for row in rows]
 
-    baseline_predictions = transcribe_dataset(baseline_model, dataset, device=device, batch_size=batch_size)
-    fine_tuned_predictions = transcribe_dataset(fine_tuned_model, dataset, device=device, batch_size=batch_size)
+    baseline_predictions = transcribe_dataset(baseline_model, rows, device=device, batch_size=batch_size)
+    fine_tuned_predictions = transcribe_dataset(fine_tuned_model, rows, device=device, batch_size=batch_size)
 
     baseline_metrics = summarize_metrics(references, baseline_predictions)
     fine_tuned_metrics = summarize_metrics(references, fine_tuned_predictions)

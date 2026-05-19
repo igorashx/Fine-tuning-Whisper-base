@@ -5,7 +5,7 @@ Acest proiect pregătește datasetul `Common Voice ro`, face fine-tuning pentru 
 ## Structură
 
 - `asr_ro/data_prep.py` normalizează audio la `16 kHz` mono și exportă CSV-urile `audio_path,text`.
-- `asr_ro/train_whisper.py` rulează fine-tuning pe `train.csv` și validează pe `dev.csv`.
+- `asr_ro/train_whisper.py` rulează fine-tuning pe `train.csv` și validează pe `dev.csv`, extrăgând feature-urile Whisper on-the-fly.
 - `asr_ro/evaluate_model.py` compară modelul fine-tuned cu modelul preantrenat pe `test.csv`.
 - `run_pipeline.py` orchestrează pașii principali.
 - `notebooks/whisper_base_ro_colab.ipynb` oferă o variantă Colab cu explicații.
@@ -30,6 +30,10 @@ Fiecare rând din manifestul rezultat conține:
 - `ffmpeg` disponibil în `PATH` pentru conversia `mp3 -> wav`
 - GPU recomandat pentru antrenare, ideal Google Colab
 
+## Comportament memorie
+
+În versiunea curentă, manifestele rămân ușoare (`audio_path`, `text`), iar extragerea feature-urilor Whisper se face on-the-fly la nivel de exemplu/batch. Astfel este evitată materializarea întregului split într-un fișier Arrow mare, care putea declanșa `ArrowMemoryError` pe Windows sau pe mașini cu RAM limitat.
+
 ## Instalare
 
 ```powershell
@@ -47,7 +51,13 @@ Fiecare rând din manifestul rezultat conține:
 ### 2. Fine-tuning Whisper base
 
 ```powershell
-& "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" -m asr_ro.train_whisper --train-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/train.csv" --dev-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/dev.csv" --output-dir "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/whisper-base-ro" --model-name openai/whisper-base --fp16 --freeze-encoder
+& "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" -m asr_ro.train_whisper --train-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/train.csv" --dev-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/dev.csv" --output-dir "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/whisper-base-ro" --model-name openai/whisper-base --freeze-encoder
+```
+
+Pentru un smoke test local sau pentru RAM limitat:
+
+```powershell
+& "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" -m asr_ro.train_whisper --train-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/train.csv" --dev-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/dev.csv" --output-dir "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/whisper-base-ro-smoke" --model-name openai/whisper-base --max-train-samples 200 --max-eval-samples 500 --freeze-encoder
 ```
 
 ### 3. Evaluare comparativă
@@ -74,6 +84,15 @@ Fiecare rând din manifestul rezultat conține:
 - `save_total_limit=2`
 
 Dacă memoria GPU este limitată, redu `train_batch_size` la `4` și păstrează `gradient_accumulation_steps=4`.
+
+## Troubleshooting
+
+- Dacă apare `ArrowMemoryError`, verifică mai întâi că folosești versiunea actuală a proiectului, unde feature-urile sunt extrase on-the-fly și nu sunt materializate într-un dataset Arrow mare.
+- Dacă apare `TypeError` pentru `evaluation_strategy`, folosești o versiune de `transformers` unde argumentul corect este `eval_strategy`; proiectul a fost actualizat pentru acest API.
+- Dacă apare `TypeError` pentru `tokenizer` în `Seq2SeqTrainer`, versiunea locală de `transformers` folosește `processing_class`; proiectul a fost actualizat și pentru această schimbare.
+- Avertismentul despre `pin_memory` pe CPU este benign; proiectul setează acum automat `dataloader_pin_memory=False` când nu există accelerator CUDA.
+- Dacă rulezi local fără CUDA, evită `--fp16`; folosește doar `--freeze-encoder` și eventual un subset prin `--max-train-samples` / `--max-eval-samples`.
+- Dacă `audio_path` nu pointează spre fișiere `.wav` la `16 kHz`, regenerează manifestele cu `asr_ro.data_prep` fără `--skip-audio-normalization`.
 
 ## Fișiere rezultate
 
