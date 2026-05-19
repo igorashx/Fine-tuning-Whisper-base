@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+from pathlib import Path
+
+import torch
+from datasets import Dataset
+from transformers import WhisperForConditionalGeneration, WhisperProcessor
+
+from asr_ro.audio_loading import load_audio_sample
+from asr_ro.metrics import summarize_metrics
+
+
+def read_manifest(csv_path: Path, limit: int | None = None) -> Dataset:
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        rows = []
+        for row in reader:
+            rows.append(row)
+            if limit is not None and len(rows) >= limit:
+                break
+    return Dataset.from_list(rows)
+
+
+def transcribe_dataset(
+    model_name_or_path: str,
+    dataset: Dataset,
+    device: str,
+    batch_size: int = 4,
+) -> list[str]:
+    processor = WhisperProcessor.from_pretrained(model_name_or_path, language="romanian", task="transcribe")
+    model = WhisperForConditionalGeneration.from_pretrained(model_name_or_path)
+    model.generation_config.language = "romanian"
+    model.generation_config.task = "transcribe"
+    model.generation_config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="romanian", task="transcribe")
+    model.to(device)
+    model.eval()
+
+    predictions: list[str] = []
+    for batch_start in range(0, len(dataset), batch_size):
+        batch = dataset[batch_start : batch_start + batch_size]
+        audio_items = [load_audio_sample(path) for path in batch["audio_path"]]
+        arrays = [item["array"] for item in audio_items]
+        sampling_rate = audio_items[0]["sampling_rate"]
+        features = processor.feature_extractor(arrays, sampling_rate=sampling_rate, return_tensors="pt")
+        with torch.no_grad():
+            generated_ids = model.generate(features.input_features.to(device), max_new_tokens=128)
+        predictions.extend(processor.batch_decode(generated_ids, skip_special_tokens=True))
+    return predictions
+
+
+def compare_models(
+    test_csv: Path,
+    fine_tuned_model: str,
+    baseline_model: str,
+    output_path: Path,
+    limit: int | None,
+    batch_size: int,
+) -> dict[str, object]:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dataset = read_manifest(test_csv, limit=limit)
+    references = dataset["text"]
+
+    baseline_predictions = transcribe_dataset(baseline_model, dataset, device=device, batch_size=batch_size)
+    fine_tuned_predictions = transcribe_dataset(fine_tuned_model, dataset, device=device, batch_size=batch_size)
+
+    baseline_metrics = summarize_metrics(references, baseline_predictions)
+    fine_tuned_metrics = summarize_metrics(references, fine_tuned_predictions)
+    deltas = {
+        metric_name: baseline_metrics[metric_name] - fine_tuned_metrics[metric_name]
+        for metric_name in baseline_metrics
+    }
+
+    preview_count = min(10, len(references))
+    comparison = {
+        "device": device,
+        "samples": len(references),
+        "baseline_model": baseline_model,
+        "fine_tuned_model": fine_tuned_model,
+        "baseline_metrics": baseline_metrics,
+        "fine_tuned_metrics": fine_tuned_metrics,
+        "improvement": deltas,
+        "examples": [
+            {
+                "reference": references[index],
+                "baseline_prediction": baseline_predictions[index],
+                "fine_tuned_prediction": fine_tuned_predictions[index],
+            }
+            for index in range(preview_count)
+        ],
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+    return comparison
+
+
+def build_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Compară Whisper base cu modelul fine-tuned pe test.tsv.")
+    parser.add_argument("--test-csv", type=Path, required=True)
+    parser.add_argument("--fine-tuned-model", required=True)
+    parser.add_argument("--baseline-model", default="openai/whisper-base")
+    parser.add_argument("--output-path", type=Path, default=Path("artifacts/evaluation/comparison.json"))
+    parser.add_argument("--limit", type=int)
+    parser.add_argument("--batch-size", type=int, default=4)
+    return parser
+
+
+def main() -> None:
+    parser = build_argument_parser()
+    args = parser.parse_args()
+    comparison = compare_models(
+        test_csv=args.test_csv,
+        fine_tuned_model=args.fine_tuned_model,
+        baseline_model=args.baseline_model,
+        output_path=args.output_path,
+        limit=args.limit,
+        batch_size=args.batch_size,
+    )
+    print(json.dumps(comparison, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
