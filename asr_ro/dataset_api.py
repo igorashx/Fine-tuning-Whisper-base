@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import tarfile
 from pathlib import Path
 from typing import Any
 from urllib import request
 
+from tqdm import tqdm
+
 DEFAULT_DATASET_ID = "cmn2e8rmi01l6mm07vxurptse"
 DEFAULT_DATASET_SLUG = "common-voice-scripted-speech-25-0-romani-701de4ae"
 DEFAULT_API_BASE_URL = "https://mozilladatacollective.com/api/datasets"
 DEFAULT_API_KEY_ENV = "MOZILLA_DATA_COLLECTIVE_API_KEY"
+
+LOGGER = logging.getLogger(__name__)
 
 
 def read_api_key(api_key: str | None = None, api_key_env: str = DEFAULT_API_KEY_ENV) -> str:
@@ -34,6 +39,7 @@ def request_download_url(
 ) -> str:
     resolved_api_key = read_api_key(api_key=api_key, api_key_env=api_key_env)
     endpoint = f"{api_base_url}/{dataset_id}/download"
+    LOGGER.info("Cer URL de download pentru datasetul `%s`.", dataset_id)
     req = request.Request(
         endpoint,
         data=b"",
@@ -53,12 +59,18 @@ def request_download_url(
 
 def download_file(download_url: str, destination: Path, chunk_size: int = 1024 * 1024) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
+    LOGGER.info("Descarc arhiva în `%s`.", destination)
     with request.urlopen(download_url) as response, destination.open("wb") as handle:
-        while True:
-            chunk = response.read(chunk_size)
-            if not chunk:
-                break
-            handle.write(chunk)
+        total_size = response.headers.get("Content-Length")
+        total = int(total_size) if total_size else None
+        with tqdm(total=total, unit="B", unit_scale=True, desc="Download dataset", leave=True) as progress_bar:
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                progress_bar.update(len(chunk))
+    LOGGER.info("Download terminat pentru `%s`.", destination)
     return destination
 
 
@@ -72,23 +84,30 @@ def _assert_safe_member_path(target_dir: Path, member_name: str) -> Path:
 
 def extract_archive(archive_path: Path, extract_dir: Path) -> Path:
     extract_dir.mkdir(parents=True, exist_ok=True)
+    LOGGER.info("Extrag arhiva `%s` în `%s`.", archive_path, extract_dir)
     with tarfile.open(archive_path, "r:gz") as archive:
-        for member in archive.getmembers():
+        members = archive.getmembers()
+        for member in tqdm(members, desc="Verific arhiva", unit="fișier", leave=False):
             _assert_safe_member_path(extract_dir, member.name)
         try:
-            archive.extractall(extract_dir, filter="data")
+            for member in tqdm(members, desc="Extrag arhiva", unit="fișier", leave=True):
+                archive.extract(member, extract_dir, filter="data")
         except TypeError:
-            archive.extractall(extract_dir)
+            for member in tqdm(members, desc="Extrag arhiva", unit="fișier", leave=True):
+                archive.extract(member, extract_dir)
+    LOGGER.info("Extracția s-a încheiat pentru `%s`.", archive_path)
     return extract_dir
 
 
 def find_dataset_root(search_root: Path) -> Path:
     search_root = search_root.resolve()
     if (search_root / "ro" / "train.tsv").exists() and (search_root / "ro" / "clips").exists():
+        LOGGER.info("Rădăcina datasetului a fost găsită direct în `%s`.", search_root)
         return search_root
     for candidate in search_root.rglob("train.tsv"):
         parent = candidate.parent.parent
         if candidate.parent.name == "ro" and (parent / "ro" / "clips").exists():
+            LOGGER.info("Rădăcina datasetului a fost detectată în `%s`.", parent)
             return parent
     raise RuntimeError(f"Nu am găsit rădăcina datasetului în {search_root}")
 
@@ -113,9 +132,12 @@ def obtain_dataset(
     extract_dir = dataset_cache_root / "extracted"
     metadata_path = dataset_cache_root / "metadata.json"
 
+    LOGGER.info("Pornesc obținerea datasetului `%s` în cache-ul `%s`.", dataset_slug, dataset_cache_root)
+
     if extract_dir.exists() and not force_extract:
         try:
             dataset_root = find_dataset_root(extract_dir)
+            LOGGER.info("Folosesc datasetul deja extras din cache: `%s`.", dataset_root)
             write_metadata(
                 metadata_path,
                 {
@@ -134,8 +156,11 @@ def obtain_dataset(
     if force_download or not archive_path.exists():
         download_url = request_download_url(dataset_id=dataset_id, api_key=api_key, api_key_env=api_key_env)
         download_file(download_url, archive_path)
+    else:
+        LOGGER.info("Reutilizez arhiva deja descărcată: `%s`.", archive_path)
 
     if force_extract and extract_dir.exists():
+        LOGGER.info("Curăț directorul extras existent `%s` înainte de re-extracție.", extract_dir)
         for item in extract_dir.iterdir():
             if item.is_dir():
                 import shutil
@@ -146,6 +171,7 @@ def obtain_dataset(
 
     extract_archive(archive_path, extract_dir)
     dataset_root = find_dataset_root(extract_dir)
+    LOGGER.info("Datasetul este pregătit în `%s`.", dataset_root)
     write_metadata(
         metadata_path,
         {
@@ -172,6 +198,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()
     dataset_root = obtain_dataset(

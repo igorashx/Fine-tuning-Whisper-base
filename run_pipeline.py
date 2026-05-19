@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import subprocess
 import sys
 from pathlib import Path
 
 from asr_ro.dataset_api import DEFAULT_API_KEY_ENV, DEFAULT_DATASET_ID, DEFAULT_DATASET_SLUG, obtain_dataset
 
+LOGGER = logging.getLogger(__name__)
+
 
 def run_command(command: list[str]) -> None:
-    print(" ".join(command))
+    LOGGER.info("Rulez comanda: %s", " ".join(command))
     subprocess.run(command, check=True)
 
 
@@ -36,8 +39,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()
+
+    LOGGER.info("Pornesc pipeline-ul complet pentru `%s`.", args.model_name)
 
     dataset_root = obtain_dataset(
         download_root=args.dataset_cache_dir,
@@ -52,6 +58,8 @@ def main() -> None:
     model_output_dir = args.artifacts_root / "whisper-base-ro"
     evaluation_output = args.artifacts_root / "evaluation" / "comparison.json"
 
+    LOGGER.info("Dataset root detectat: `%s`.", dataset_root)
+
     prep_command = [
         sys.executable,
         "-m",
@@ -65,6 +73,7 @@ def main() -> None:
         prep_command.append("--skip-audio-normalization")
     if args.prep_limit:
         prep_command.extend(["--limit-per-split", str(args.prep_limit)])
+    LOGGER.info("Etapa 1/3: pregătire date.")
     run_command(prep_command)
 
     if not args.skip_train:
@@ -89,6 +98,7 @@ def main() -> None:
             train_command.append("--freeze-encoder")
         if args.gradient_checkpointing:
             train_command.append("--gradient-checkpointing")
+        LOGGER.info("Etapa 2/3: antrenare model.")
         run_command(train_command)
 
     if not args.skip_eval:
@@ -107,7 +117,10 @@ def main() -> None:
         ]
         if args.eval_limit:
             eval_command.extend(["--limit", str(args.eval_limit)])
+        LOGGER.info("Etapa 3/3: evaluare comparativă.")
         run_command(eval_command)
+
+    LOGGER.info("Pipeline finalizat. Artefacte principale: `%s`, `%s`, `%s`.", manifests_root, model_output_dir, evaluation_output)
 
 
 if __name__ == "__main__":

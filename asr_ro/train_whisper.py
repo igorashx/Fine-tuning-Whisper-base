@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,8 @@ from transformers import (
 
 from asr_ro.metrics import summarize_metrics
 from asr_ro.training_dataset import WhisperTrainingDataset, read_manifest_rows
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,6 +55,7 @@ def compute_metrics_builder(processor: WhisperProcessor):
     return compute_metrics
 
 def train_model(args: argparse.Namespace) -> dict[str, float]:
+    LOGGER.info("Încarc processor și modelul `%s`.", args.model_name)
     processor = WhisperProcessor.from_pretrained(args.model_name, language="romanian", task="transcribe")
     model = WhisperForConditionalGeneration.from_pretrained(args.model_name)
     use_accelerator = torch.cuda.is_available()
@@ -62,9 +66,11 @@ def train_model(args: argparse.Namespace) -> dict[str, float]:
     if args.freeze_encoder:
         model.freeze_encoder()
         model.model.encoder.gradient_checkpointing = False
+        LOGGER.info("Encoderul a fost înghețat.")
 
     train_rows = read_manifest_rows(args.train_csv, limit=args.max_train_samples)
     eval_rows = read_manifest_rows(args.dev_csv, limit=args.max_eval_samples)
+    LOGGER.info("Am încărcat %s exemple de train și %s exemple de evaluare.", len(train_rows), len(eval_rows))
     train_dataset = WhisperTrainingDataset(train_rows, processor)
     eval_dataset = WhisperTrainingDataset(eval_rows, processor)
 
@@ -84,6 +90,7 @@ def train_model(args: argparse.Namespace) -> dict[str, float]:
         predict_with_generate=True,
         generation_max_length=args.generation_max_length,
         logging_steps=args.logging_steps,
+        disable_tqdm=False,
         report_to=["none"],
         load_best_model_at_end=True,
         metric_for_best_model="wer",
@@ -103,6 +110,7 @@ def train_model(args: argparse.Namespace) -> dict[str, float]:
         compute_metrics=compute_metrics_builder(processor),
     )
 
+    LOGGER.info("Pornesc fine-tuning-ul în `%s` pe `%s`.", args.output_dir, "cuda" if use_accelerator else "cpu")
     train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     trainer.save_model()
     processor.save_pretrained(args.output_dir)
@@ -129,6 +137,7 @@ def train_model(args: argparse.Namespace) -> dict[str, float]:
         ),
         encoding="utf-8",
     )
+    LOGGER.info("Training încheiat. Rezumatul este în `%s`.", summary_path)
     return {key: float(value) for key, value in evaluation_metrics.items() if isinstance(value, (float, int))}
 
 
@@ -158,6 +167,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)

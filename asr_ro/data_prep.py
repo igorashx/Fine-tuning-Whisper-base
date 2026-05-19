@@ -3,15 +3,20 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
+from tqdm import tqdm
+
 from asr_ro.text_normalization import normalize_transcript
 
 OFFICIAL_SPLITS = ("train", "dev", "test")
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -88,6 +93,7 @@ def prepare_split_manifest(
     max_duration_ms: int = 30_000,
     limit: int | None = None,
 ) -> dict[str, object]:
+    LOGGER.info("Pregătesc split-ul `%s` din `%s`.", split, dataset_root)
     durations = read_clip_durations(dataset_root)
     rows = load_split_rows(dataset_root, split)
     manifest_rows: list[ManifestRow] = []
@@ -96,7 +102,8 @@ def prepare_split_manifest(
     skipped_missing = 0
     skipped_duration = 0
 
-    for row in rows:
+    progress_total = min(len(rows), limit) if limit is not None else len(rows)
+    for row in tqdm(rows, total=progress_total, desc=f"Pregătire {split}", unit="exemplu", leave=True):
         clip_name = row["path"]
         source_path = dataset_root / "ro" / "clips" / clip_name
         if not source_path.exists():
@@ -150,6 +157,13 @@ def prepare_split_manifest(
         "audio_root": str(output_root.resolve()),
         "normalize_audio": normalize_audio,
     }
+    LOGGER.info(
+        "Split `%s` gata: %s exemple, %s lipsă, %s filtrate după durată.",
+        split,
+        len(manifest_rows),
+        skipped_missing,
+        skipped_duration,
+    )
     return summary
 
 
@@ -163,6 +177,7 @@ def prepare_all_manifests(
     limit_per_split: int | None = None,
 ) -> list[dict[str, object]]:
     output_root.mkdir(parents=True, exist_ok=True)
+    LOGGER.info("Pornesc generarea manifestelor în `%s`.", output_root)
     summaries = []
     for split in OFFICIAL_SPLITS:
         summaries.append(
@@ -179,6 +194,7 @@ def prepare_all_manifests(
         )
     summary_path = output_root / "manifests" / "summary.json"
     summary_path.write_text(json.dumps(summaries, ensure_ascii=False, indent=2), encoding="utf-8")
+    LOGGER.info("Toate manifestele au fost generate. Rezumatul este în `%s`.", summary_path)
     return summaries
 
 
@@ -195,6 +211,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()
     summaries = prepare_all_manifests(

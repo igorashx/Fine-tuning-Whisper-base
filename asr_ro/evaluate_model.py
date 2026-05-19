@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import torch
+from tqdm import tqdm
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 
 from asr_ro.audio_loading import load_audio_sample
 from asr_ro.metrics import summarize_metrics
 from asr_ro.training_dataset import read_manifest_rows
+
+LOGGER = logging.getLogger(__name__)
 
 
 def transcribe_dataset(
@@ -18,6 +22,7 @@ def transcribe_dataset(
     device: str,
     batch_size: int = 4,
 ) -> list[str]:
+    LOGGER.info("Încarc modelul `%s` pentru transcriere pe `%s`.", model_name_or_path, device)
     processor = WhisperProcessor.from_pretrained(model_name_or_path, language="romanian", task="transcribe")
     model = WhisperForConditionalGeneration.from_pretrained(model_name_or_path)
     model.generation_config.language = "romanian"
@@ -27,7 +32,8 @@ def transcribe_dataset(
     model.eval()
 
     predictions: list[str] = []
-    for batch_start in range(0, len(rows), batch_size):
+    total_batches = (len(rows) + batch_size - 1) // batch_size if rows else 0
+    for batch_start in tqdm(range(0, len(rows), batch_size), total=total_batches, desc=f"Transcriere {Path(model_name_or_path).name}", unit="batch", leave=True):
         batch_rows = rows[batch_start : batch_start + batch_size]
         audio_items = [load_audio_sample(row["audio_path"]) for row in batch_rows]
         arrays = [item["array"] for item in audio_items]
@@ -49,6 +55,7 @@ def compare_models(
 ) -> dict[str, object]:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     rows = read_manifest_rows(test_csv, limit=limit)
+    LOGGER.info("Evaluez %s exemple din `%s` pe `%s`.", len(rows), test_csv, device)
     references = [row["text"] for row in rows]
 
     baseline_predictions = transcribe_dataset(baseline_model, rows, device=device, batch_size=batch_size)
@@ -81,6 +88,7 @@ def compare_models(
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+    LOGGER.info("Evaluarea s-a încheiat. Rezultatele sunt în `%s`.", output_path)
     return comparison
 
 
@@ -96,6 +104,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()
     comparison = compare_models(
