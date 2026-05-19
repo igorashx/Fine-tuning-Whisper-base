@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from asr_ro.dataset_api import DEFAULT_API_KEY_ENV, DEFAULT_DATASET_ID, DEFAULT_DATASET_SLUG, obtain_dataset
+
 
 def run_command(command: list[str]) -> None:
     print(" ".join(command))
@@ -13,8 +15,13 @@ def run_command(command: list[str]) -> None:
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Rulează pipeline-ul complet pentru Whisper base pe Common Voice ro.")
-    parser.add_argument("--dataset-root", type=Path, required=True)
     parser.add_argument("--artifacts-root", type=Path, default=Path("artifacts"))
+    parser.add_argument("--dataset-cache-dir", type=Path, default=Path("artifacts/datasets"))
+    parser.add_argument("--dataset-id", default=DEFAULT_DATASET_ID)
+    parser.add_argument("--dataset-slug", default=DEFAULT_DATASET_SLUG)
+    parser.add_argument("--api-key-env", default=DEFAULT_API_KEY_ENV)
+    parser.add_argument("--force-download", action="store_true")
+    parser.add_argument("--force-extract", action="store_true")
     parser.add_argument("--model-name", default="openai/whisper-base")
     parser.add_argument("--prep-limit", type=int)
     parser.add_argument("--train-limit", type=int)
@@ -32,6 +39,15 @@ def main() -> None:
     parser = build_argument_parser()
     args = parser.parse_args()
 
+    dataset_root = obtain_dataset(
+        download_root=args.dataset_cache_dir,
+        dataset_id=args.dataset_id,
+        dataset_slug=args.dataset_slug,
+        api_key_env=args.api_key_env,
+        force_download=args.force_download,
+        force_extract=args.force_extract,
+    )
+
     manifests_root = args.artifacts_root / "cv_ro"
     model_output_dir = args.artifacts_root / "whisper-base-ro"
     evaluation_output = args.artifacts_root / "evaluation" / "comparison.json"
@@ -41,7 +57,7 @@ def main() -> None:
         "-m",
         "asr_ro.data_prep",
         "--dataset-root",
-        str(args.dataset_root),
+        str(dataset_root),
         "--output-root",
         str(manifests_root),
     ]

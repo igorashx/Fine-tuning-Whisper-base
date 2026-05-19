@@ -24,25 +24,26 @@ class FakeProcessor:
 
 
 def write_manifest(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=["audio_path", "text"])
         writer.writeheader()
-        writer.writerow({"audio_path": "sample.wav", "text": "Salut"})
-        writer.writerow({"audio_path": "sample_2.wav", "text": "Bună"})
+        writer.writerow({"audio_path": "audio_16k/train/sample.wav", "text": "Salut"})
+        writer.writerow({"audio_path": "audio_16k/train/sample_2.wav", "text": "Bună"})
 
 
 def test_read_manifest_rows_respects_limit(tmp_path: Path) -> None:
-    manifest_path = tmp_path / "train.csv"
+    manifest_path = tmp_path / "output" / "manifests" / "train.csv"
     write_manifest(manifest_path)
 
     rows = read_manifest_rows(manifest_path, limit=1)
 
     assert len(rows) == 1
-    assert rows[0]["audio_path"] == "sample.wav"
+    assert rows[0]["audio_path"].endswith("audio_16k\\train\\sample.wav") or rows[0]["audio_path"].endswith("audio_16k/train/sample.wav")
 
 
 def test_whisper_training_dataset_loads_features_lazily(tmp_path: Path, monkeypatch) -> None:
-    manifest_path = tmp_path / "train.csv"
+    manifest_path = tmp_path / "output" / "manifests" / "train.csv"
     write_manifest(manifest_path)
     rows = read_manifest_rows(manifest_path)
 

@@ -92,6 +92,7 @@ def prepare_split_manifest(
     rows = load_split_rows(dataset_root, split)
     manifest_rows: list[ManifestRow] = []
     normalized_audio_root = output_root / "audio_16k" / split
+    source_audio_root = output_root / "source_audio" / split
     skipped_missing = 0
     skipped_duration = 0
 
@@ -113,11 +114,15 @@ def prepare_split_manifest(
                 convert_audio_to_wav(source_path, target_path, ffmpeg_path=ffmpeg_path)
             audio_path = target_path
         else:
-            audio_path = source_path
+            target_path = source_audio_root / clip_name
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            if not target_path.exists():
+                shutil.copy2(source_path, target_path)
+            audio_path = target_path
 
         manifest_rows.append(
             ManifestRow(
-                audio_path=str(audio_path.resolve()),
+                audio_path=audio_path.relative_to(output_root).as_posix(),
                 text=normalize_transcript(row["sentence"]),
             )
         )
@@ -142,6 +147,7 @@ def prepare_split_manifest(
         "skipped_missing": skipped_missing,
         "skipped_duration": skipped_duration,
         "manifest_path": str(manifest_path.resolve()),
+        "audio_root": str(output_root.resolve()),
         "normalize_audio": normalize_audio,
     }
     return summary

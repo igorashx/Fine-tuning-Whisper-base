@@ -13,10 +13,14 @@ ManifestRow = dict[str, str]
 
 
 def read_manifest_rows(csv_path: Path, limit: int | None = None) -> list[ManifestRow]:
+    manifest_base_dir = csv_path.parent.parent
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         rows: list[ManifestRow] = []
         for row in reader:
+            audio_path = Path(row["audio_path"])
+            if not audio_path.is_absolute():
+                row["audio_path"] = str((manifest_base_dir / audio_path).resolve())
             rows.append(row)
             if limit is not None and len(rows) >= limit:
                 break

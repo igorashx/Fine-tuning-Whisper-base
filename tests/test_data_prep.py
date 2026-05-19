@@ -78,5 +78,6 @@ def test_prepare_split_manifest_exports_audio_path_and_text(tmp_path: Path) -> N
         rows = list(reader)
 
     assert reader.fieldnames == ["audio_path", "text"]
-    assert rows[0]["audio_path"].endswith("sample.mp3")
+    assert rows[0]["audio_path"] == "source_audio/train/sample.mp3"
+    assert (output_root / rows[0]["audio_path"]).exists()
     assert rows[0]["text"] == "Salut, România!"
