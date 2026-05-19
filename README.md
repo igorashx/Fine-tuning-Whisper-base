@@ -27,7 +27,7 @@ Fiecare rând din manifestul rezultat conține:
 ## Cerințe
 
 - Python `3.12+`
-- `ffmpeg` disponibil în `PATH` pentru conversia `mp3 -> wav`
+- `ffmpeg` în `PATH` sau fallback-ul `imageio-ffmpeg` disponibil prin dependențele Python pentru conversia `mp3 -> wav`
 - GPU recomandat pentru antrenare, ideal Google Colab
 
 ## Comportament memorie
@@ -57,20 +57,22 @@ Fiecare rând din manifestul rezultat conține:
 Pentru un smoke test local sau pentru RAM limitat:
 
 ```powershell
-& "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" -m asr_ro.train_whisper --train-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/train.csv" --dev-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/dev.csv" --output-dir "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/whisper-base-ro-smoke" --model-name openai/whisper-base --max-train-samples 200 --max-eval-samples 500 --freeze-encoder
+& "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" -m asr_ro.train_whisper --train-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/train.csv" --dev-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/dev.csv" --output-dir "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/whisper-base-ro-smoke" --model-name openai/whisper-base --max-train-samples 1000 --max-eval-samples 500 --max-steps 50 --train-batch-size 1 --eval-batch-size 1 --freeze-encoder
 ```
 
 ### 3. Evaluare comparativă
 
 ```powershell
-"d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" -m asr_ro.evaluate_model --test-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/test.csv" --fine-tuned-model "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/whisper-base-ro" --baseline-model openai/whisper-base --output-path "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/evaluation/comparison.json"
+& "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" -m asr_ro.evaluate_model --test-csv "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/cv_ro/manifests/test.csv" --fine-tuned-model "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/whisper-base-ro" --baseline-model openai/whisper-base --output-path "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/artifacts/evaluation/comparison.json"
 ```
 
 ### 4. Pipeline complet
 
 ```powershell
-"d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" run_pipeline.py --dataset-root "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/1774203787031-cv-corpus-25.0-2026-03-09-ro" --fp16 --freeze-encoder
+& "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/.venv/Scripts/python.exe" run_pipeline.py --dataset-root "d:/Python/master/Anul 1/Sem 2/Deep Learning/Laborator 3/Video to text/1774203787031-cv-corpus-25.0-2026-03-09-ro" --freeze-encoder
 ```
+
+Adaugă `--fp16` doar când rulezi pe GPU compatibil, de exemplu în Colab.
 
 ## Parametri recomandați pentru Colab
 
@@ -80,7 +82,7 @@ Pentru un smoke test local sau pentru RAM limitat:
 - `num_train_epochs=8`
 - `learning_rate=1e-5`
 - `save_strategy=epoch`
-- `evaluation_strategy=epoch`
+- `eval_strategy=epoch`
 - `save_total_limit=2`
 
 Dacă memoria GPU este limitată, redu `train_batch_size` la `4` și păstrează `gradient_accumulation_steps=4`.
@@ -92,6 +94,7 @@ Dacă memoria GPU este limitată, redu `train_batch_size` la `4` și păstrează
 - Dacă apare `TypeError` pentru `tokenizer` în `Seq2SeqTrainer`, versiunea locală de `transformers` folosește `processing_class`; proiectul a fost actualizat și pentru această schimbare.
 - Avertismentul despre `pin_memory` pe CPU este benign; proiectul setează acum automat `dataloader_pin_memory=False` când nu există accelerator CUDA.
 - Dacă rulezi local fără CUDA, evită `--fp16`; folosește doar `--freeze-encoder` și eventual un subset prin `--max-train-samples` / `--max-eval-samples`.
+- Pentru un smoke test verificat local, comanda recomandată este cea cu `500/100`, `--max-steps 20` și batch size `1`.
 - Dacă `audio_path` nu pointează spre fișiere `.wav` la `16 kHz`, regenerează manifestele cu `asr_ro.data_prep` fără `--skip-audio-normalization`.
 
 ## Fișiere rezultate
