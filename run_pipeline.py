@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import logging
 import subprocess
 import sys
@@ -11,9 +12,53 @@ from asr_ro.dataset_api import DEFAULT_API_KEY_ENV, DEFAULT_DATASET_ID, DEFAULT_
 LOGGER = logging.getLogger(__name__)
 
 
-def run_command(command: list[str]) -> None:
+def configure_logging(artifacts_root: Path) -> Path:
+    logs_dir = artifacts_root / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_path = logs_dir / f"run_pipeline_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.handlers.clear()
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
+    logging.captureWarnings(True)
+    return log_path
+
+
+def run_command(command: list[str], log_handle) -> None:
     LOGGER.info("Rulez comanda: %s", " ".join(command))
-    subprocess.run(command, check=True)
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=0,
+    )
+
+    assert process.stdout is not None
+    while True:
+        chunk = process.stdout.read(8192)
+        if not chunk:
+            break
+        text = chunk.decode("utf-8", errors="replace")
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        log_handle.write(text)
+        log_handle.flush()
+
+    return_code = process.wait()
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -39,9 +84,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()
+    log_path = configure_logging(args.artifacts_root)
+
+    LOGGER.info("Logul complet al execuției va fi salvat în `%s`.", log_path)
 
     LOGGER.info("Pornesc pipeline-ul complet pentru `%s`.", args.model_name)
 
@@ -74,7 +121,8 @@ def main() -> None:
     if args.prep_limit:
         prep_command.extend(["--limit-per-split", str(args.prep_limit)])
     LOGGER.info("Etapa 1/3: pregătire date.")
-    run_command(prep_command)
+    with log_path.open("a", encoding="utf-8") as log_handle:
+        run_command(prep_command, log_handle)
 
     if not args.skip_train:
         train_command = [
@@ -99,7 +147,8 @@ def main() -> None:
         if args.gradient_checkpointing:
             train_command.append("--gradient-checkpointing")
         LOGGER.info("Etapa 2/3: antrenare model.")
-        run_command(train_command)
+        with log_path.open("a", encoding="utf-8") as log_handle:
+            run_command(train_command, log_handle)
 
     if not args.skip_eval:
         eval_command = [
@@ -118,9 +167,11 @@ def main() -> None:
         if args.eval_limit:
             eval_command.extend(["--limit", str(args.eval_limit)])
         LOGGER.info("Etapa 3/3: evaluare comparativă.")
-        run_command(eval_command)
+        with log_path.open("a", encoding="utf-8") as log_handle:
+            run_command(eval_command, log_handle)
 
     LOGGER.info("Pipeline finalizat. Artefacte principale: `%s`, `%s`, `%s`.", manifests_root, model_output_dir, evaluation_output)
+    LOGGER.info("Logul complet al rulării este disponibil în `%s`.", log_path)
 
 
 if __name__ == "__main__":
