@@ -11,6 +11,8 @@ from urllib import request
 
 from tqdm import tqdm
 
+from asr_ro.console import configure_utf8_console
+
 DEFAULT_DATASET_ID = "cmn2e8rmi01l6mm07vxurptse"
 DEFAULT_DATASET_SLUG = "common-voice-scripted-speech-25-0-romani-701de4ae"
 DEFAULT_API_BASE_URL = "https://mozilladatacollective.com/api/datasets"
@@ -198,6 +200,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    configure_utf8_console()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()

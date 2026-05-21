@@ -13,11 +13,20 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+from asr_ro.console import configure_utf8_console
+from asr_ro.parallelism import resolve_worker_count
 from asr_ro.text_normalization import normalize_transcript
 
 OFFICIAL_SPLITS = ("train", "dev", "test")
 
 LOGGER = logging.getLogger(__name__)
+
+
+def resolve_num_workers(num_workers: int) -> int:
+    if num_workers == -1:
+        detected = os.cpu_count() or 1
+        return max(1, detected)
+    return resolve_worker_count(num_workers, allow_zero=False)
 
 
 @dataclass
@@ -42,15 +51,6 @@ class PreparationResult:
     text: str | None
     status: str
     error: str | None = None
-
-
-def resolve_num_workers(num_workers: int) -> int:
-    if num_workers == -1:
-        available_cpus = os.cpu_count() or 1
-        return max(1, available_cpus)
-    if num_workers < 1:
-        raise ValueError("`num_workers` trebuie să fie 1, mai mare decât 1 sau -1 pentru auto.")
-    return num_workers
 
 
 def read_clip_durations(dataset_root: Path) -> dict[str, int]:
@@ -194,7 +194,7 @@ def iter_preparation_results(
     num_workers: int,
     chunksize: int,
 ):
-    resolved_num_workers = resolve_num_workers(num_workers)
+    resolved_num_workers = resolve_worker_count(num_workers, allow_zero=False)
     if chunksize < 1:
         raise ValueError("`chunksize` trebuie să fie cel puțin 1.")
 
@@ -222,7 +222,7 @@ def prepare_split_manifest(
     chunksize: int = 1,
 ) -> dict[str, object]:
     LOGGER.info("Pregătesc split-ul `%s` din `%s`.", split, dataset_root)
-    resolved_num_workers = resolve_num_workers(num_workers)
+    resolved_num_workers = resolve_worker_count(num_workers, allow_zero=False)
     tasks, skipped_missing, skipped_duration = build_preparation_tasks(
         dataset_root=dataset_root,
         output_root=output_root,
@@ -335,6 +335,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    configure_utf8_console()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()

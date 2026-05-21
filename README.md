@@ -118,6 +118,12 @@ Pentru folosirea automată a tuturor workerilor disponibili:
 python run_pipeline.py --dataset-cache-dir "artifacts/datasets" --freeze-encoder --prep-num-workers -1
 ```
 
+Pentru accelerarea validării din training și a evaluării finale:
+
+```powershell
+python run_pipeline.py --dataset-cache-dir "artifacts/datasets" --freeze-encoder --validation-num-workers 2 --test-num-workers 2
+```
+
 ### Pipeline complet pe subset mic
 
 Util pentru verificare rapidă pe CPU sau pentru un smoke test:
@@ -160,10 +166,22 @@ python -m asr_ro.data_prep --dataset-root "<dataset_root_afisat_de_dataset_api>"
 python -m asr_ro.train_whisper --train-csv "artifacts/cv_ro/manifests/train.csv" --dev-csv "artifacts/cv_ro/manifests/dev.csv" --output-dir "artifacts/whisper-base-ro" --model-name openai/whisper-base --freeze-encoder
 ```
 
+Pentru accelerarea validării pe `dev` în timpul fine-tuning-ului:
+
+```powershell
+python -m asr_ro.train_whisper --train-csv "artifacts/cv_ro/manifests/train.csv" --dev-csv "artifacts/cv_ro/manifests/dev.csv" --output-dir "artifacts/whisper-base-ro" --model-name openai/whisper-base --freeze-encoder --validation-num-workers 2
+```
+
 ### 3. Evaluare comparativă
 
 ```powershell
 python -m asr_ro.evaluate_model --test-csv "artifacts/cv_ro/manifests/test.csv" --fine-tuned-model "artifacts/whisper-base-ro" --baseline-model openai/whisper-base --output-path "artifacts/evaluation/comparison.json"
+```
+
+Pentru accelerarea încărcării și preprocesării audio la evaluarea finală:
+
+```powershell
+python -m asr_ro.evaluate_model --test-csv "artifacts/cv_ro/manifests/test.csv" --fine-tuned-model "artifacts/whisper-base-ro" --baseline-model openai/whisper-base --output-path "artifacts/evaluation/comparison.json" --num-workers 2
 ```
 
 ## Google Colab
@@ -186,6 +204,7 @@ MOZILLA_DATA_COLLECTIVE_API_KEY="<cheia-ta-api>" python run_pipeline.py \
 	--dataset-cache-dir "/content/artifacts/datasets" \
 	--freeze-encoder \
 	--fp16 \
+	--validation-num-workers 2 \
 	--prep-num-workers 4 \
 	--prep-chunksize 2
 ```
@@ -209,6 +228,12 @@ Pregătirea datelor poate rula secvențial sau paralel:
 - `--num-workers -1` selectează automat toți workerii CPU disponibili;
 - `--chunksize` controlează câte task-uri sunt trimise unui worker într-un lot.
 
+Validarea și evaluarea finală pot fi accelerate prin worker-i CPU pentru DataLoader:
+
+- `--validation-num-workers` controlează câți worker-i sunt folosiți la validarea pe `dev` în timpul fine-tuning-ului;
+- `--test-num-workers` controlează câți worker-i sunt folosiți la evaluarea finală pe `test`;
+- aceste opțiuni accelerează încărcarea și preprocesarea batch-urilor, nu inferența GPU în sine.
+
 La fiecare rulare a lui `run_pipeline.py` se creează automat un fișier de log unic:
 
 - `artifacts/logs/run_pipeline_YYYY-MM-DD_HH-MM-SS.log`
@@ -224,6 +249,7 @@ Acest fișier conține:
 - dacă există CUDA funcțional, modelul rulează pe GPU;
 - dacă nu există GPU, proiectul cade automat pe CPU;
 - `--fp16` nu trebuie folosit pe CPU.
+- `--validation-num-workers` și `--test-num-workers` folosesc CPU pentru a pregăti mai repede batch-urile care ajung pe GPU.
 
 ## Artefacte generate
 
@@ -267,6 +293,8 @@ python -m pytest tests -q
 - dacă rulezi pe CPU, folosește subsete mici prin `--prep-limit`, `--train-limit` și `--eval-limit`.
 - dacă paralelizarea nu ajută sau încetinește, redu `--prep-num-workers`; pe HDD prea mulți workeri pot satura I/O.
 - pe Windows, paralelizarea folosește procese separate; evită valori exagerate pentru `--prep-num-workers` și începe cu `2-4`.
+- pentru validare și evaluare pe un singur GPU, începe cu `--validation-num-workers 2` și `--test-num-workers 2`; valori mai mari nu garantează accelerare.
+- nu paraleliza inferența pentru baseline și fine-tuned pe același GPU; proiectul paralelizează doar I/O-ul și pregătirea batch-urilor.
 
 ## Observații importante
 

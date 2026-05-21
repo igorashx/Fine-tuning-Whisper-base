@@ -2,7 +2,9 @@
 
 __all__ = [
     "audio_loading",
+    "console",
     "dataset_api",
+    "parallelism",
     "text_normalization",
     "metrics",
     "data_prep",

@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from asr_ro.console import configure_utf8_console
 from asr_ro.dataset_api import DEFAULT_API_KEY_ENV, DEFAULT_DATASET_ID, DEFAULT_DATASET_SLUG, obtain_dataset
 
 LOGGER = logging.getLogger(__name__)
@@ -74,6 +75,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prep-limit", type=int)
     parser.add_argument("--prep-num-workers", type=int, default=1)
     parser.add_argument("--prep-chunksize", type=int, default=1)
+    parser.add_argument("--validation-num-workers", type=int, default=0)
+    parser.add_argument("--test-num-workers", type=int, default=0)
     parser.add_argument("--train-limit", type=int)
     parser.add_argument("--eval-limit", type=int)
     parser.add_argument("--skip-audio-normalization", action="store_true")
@@ -86,6 +89,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    configure_utf8_console()
     parser = build_argument_parser()
     args = parser.parse_args()
     log_path = configure_logging(args.artifacts_root)
@@ -143,6 +147,7 @@ def main() -> None:
         ]
         if args.train_limit:
             train_command.extend(["--max-train-samples", str(args.train_limit), "--max-eval-samples", str(args.train_limit)])
+        train_command.extend(["--validation-num-workers", str(args.validation_num_workers)])
         if args.fp16:
             train_command.append("--fp16")
         if args.freeze_encoder:
@@ -169,6 +174,7 @@ def main() -> None:
         ]
         if args.eval_limit:
             eval_command.extend(["--limit", str(args.eval_limit)])
+        eval_command.extend(["--num-workers", str(args.test_num_workers)])
         LOGGER.info("Etapa 3/3: evaluare comparativă.")
         with log_path.open("a", encoding="utf-8") as log_handle:
             run_command(eval_command, log_handle)

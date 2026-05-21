@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from torch.utils.data import DataLoader
 from transformers import (
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
@@ -15,7 +16,9 @@ from transformers import (
     WhisperProcessor,
 )
 
+from asr_ro.console import configure_utf8_console
 from asr_ro.metrics import summarize_metrics
+from asr_ro.parallelism import resolve_worker_count
 from asr_ro.training_dataset import WhisperTrainingDataset, read_manifest_rows
 
 LOGGER = logging.getLogger(__name__)
@@ -39,6 +42,28 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         batch["labels"] = labels
         return batch
 
+
+class WhisperValidationTrainer(Seq2SeqTrainer):
+    def __init__(self, *args, validation_num_workers: int = 0, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.validation_num_workers = validation_num_workers
+
+    def get_eval_dataloader(self, eval_dataset=None):
+        eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        if eval_dataset is None:
+            raise ValueError("Evaluation requires an eval_dataset.")
+
+        eval_dataloader = DataLoader(
+            eval_dataset,
+            batch_size=self.args.eval_batch_size,
+            sampler=self._get_eval_sampler(eval_dataset),
+            collate_fn=self.data_collator,
+            drop_last=getattr(self.args, "dataloader_drop_last", False),
+            num_workers=self.validation_num_workers,
+            pin_memory=self.args.dataloader_pin_memory,
+        )
+        return self.accelerator.prepare(eval_dataloader)
+
 def compute_metrics_builder(processor: WhisperProcessor):
     def compute_metrics(prediction_output) -> dict[str, float]:
         prediction_ids = prediction_output.predictions
@@ -59,6 +84,7 @@ def train_model(args: argparse.Namespace) -> dict[str, float]:
     processor = WhisperProcessor.from_pretrained(args.model_name, language="romanian", task="transcribe")
     model = WhisperForConditionalGeneration.from_pretrained(args.model_name)
     use_accelerator = torch.cuda.is_available()
+    validation_num_workers = resolve_worker_count(args.validation_num_workers, allow_zero=True)
     model.generation_config.language = "romanian"
     model.generation_config.task = "transcribe"
     model.generation_config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="romanian", task="transcribe")
@@ -71,6 +97,7 @@ def train_model(args: argparse.Namespace) -> dict[str, float]:
     train_rows = read_manifest_rows(args.train_csv, limit=args.max_train_samples)
     eval_rows = read_manifest_rows(args.dev_csv, limit=args.max_eval_samples)
     LOGGER.info("Am încărcat %s exemple de train și %s exemple de evaluare.", len(train_rows), len(eval_rows))
+    LOGGER.info("Validarea pe `dev` va folosi `%s` worker-i pentru DataLoader.", validation_num_workers)
     train_dataset = WhisperTrainingDataset(train_rows, processor)
     eval_dataset = WhisperTrainingDataset(eval_rows, processor)
 
@@ -100,7 +127,7 @@ def train_model(args: argparse.Namespace) -> dict[str, float]:
         remove_unused_columns=False,
     )
 
-    trainer = Seq2SeqTrainer(
+    trainer = WhisperValidationTrainer(
         args=training_arguments,
         model=model,
         train_dataset=train_dataset,
@@ -108,6 +135,7 @@ def train_model(args: argparse.Namespace) -> dict[str, float]:
         data_collator=DataCollatorSpeechSeq2SeqWithPadding(processor=processor),
         processing_class=processor,
         compute_metrics=compute_metrics_builder(processor),
+        validation_num_workers=validation_num_workers,
     )
 
     LOGGER.info("Pornesc fine-tuning-ul în `%s` pe `%s`.", args.output_dir, "cuda" if use_accelerator else "cpu")
@@ -159,6 +187,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--save-total-limit", type=int, default=2)
     parser.add_argument("--max-train-samples", type=int)
     parser.add_argument("--max-eval-samples", type=int)
+    parser.add_argument("--validation-num-workers", type=int, default=0)
     parser.add_argument("--freeze-encoder", action="store_true")
     parser.add_argument("--gradient-checkpointing", action="store_true")
     parser.add_argument("--fp16", action="store_true")
@@ -167,6 +196,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    configure_utf8_console()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     parser = build_argument_parser()
     args = parser.parse_args()
