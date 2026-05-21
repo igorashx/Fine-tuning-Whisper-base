@@ -106,6 +106,12 @@ python run_pipeline.py --dataset-cache-dir "artifacts/datasets" --freeze-encoder
 
 Adaugă `--fp16` doar dacă rulezi pe GPU compatibil CUDA.
 
+Pentru paralelizarea pregătirii datelor, poți adăuga:
+
+```powershell
+python run_pipeline.py --dataset-cache-dir "artifacts/datasets" --freeze-encoder --prep-num-workers 4 --prep-chunksize 2
+```
+
 ### Pipeline complet pe subset mic
 
 Util pentru verificare rapidă pe CPU sau pentru un smoke test:
@@ -128,6 +134,12 @@ Comanda afișează rădăcina datasetului extras, pe care o poți folosi manual 
 
 ```powershell
 python -m asr_ro.data_prep --dataset-root "<dataset_root_afisat_de_dataset_api>" --output-root "artifacts/cv_ro"
+```
+
+Pentru paralelizare la nivel de pregătire audio:
+
+```powershell
+python -m asr_ro.data_prep --dataset-root "<dataset_root_afisat_de_dataset_api>" --output-root "artifacts/cv_ro" --num-workers 4 --chunksize 2
 ```
 
 ### 2. Fine-tuning
@@ -161,7 +173,9 @@ Exemplu de comandă Colab:
 MOZILLA_DATA_COLLECTIVE_API_KEY="<cheia-ta-api>" python run_pipeline.py \
 	--dataset-cache-dir "/content/artifacts/datasets" \
 	--freeze-encoder \
-	--fp16
+	--fp16 \
+	--prep-num-workers 4 \
+	--prep-chunksize 2
 ```
 
 `--fp16` este recomandat în Colab doar dacă instanța are GPU activ.
@@ -175,6 +189,12 @@ Proiectul afișează acum loguri mai detaliate și bare de progres `tqdm` pentru
 - pregătirea split-urilor `train/dev/test`;
 - batch-urile de evaluare;
 - progresul antrenării prin `Trainer`.
+
+Pregătirea datelor poate rula secvențial sau paralel:
+
+- `--num-workers 1` păstrează comportamentul secvențial și este opțiunea cea mai sigură pentru debugging;
+- `--num-workers > 1` activează worker-i multiproces pentru conversia/copierea audio;
+- `--chunksize` controlează câte task-uri sunt trimise unui worker într-un lot.
 
 La fiecare rulare a lui `run_pipeline.py` se creează automat un fișier de log unic:
 
@@ -232,10 +252,13 @@ python -m pytest tests -q
 - dacă directorul extras este corupt sau incomplet, rerulează cu `--force-extract`.
 - dacă `run_pipeline.py` nu găsește cheia API, verifică variabila `MOZILLA_DATA_COLLECTIVE_API_KEY` în sesiunea curentă.
 - dacă rulezi pe CPU, folosește subsete mici prin `--prep-limit`, `--train-limit` și `--eval-limit`.
+- dacă paralelizarea nu ajută sau încetinește, redu `--prep-num-workers`; pe HDD prea mulți workeri pot satura I/O.
+- pe Windows, paralelizarea folosește procese separate; evită valori exagerate pentru `--prep-num-workers` și începe cu `2-4`.
 
 ## Observații importante
 
 - `run_pipeline.py` nu cere `--dataset-root`; îl obține automat prin API și cache.
 - manifestele folosesc căi relative, nu absolute.
+- scrierea manifestelor rămâne în procesul principal, chiar dacă pregătirea audio rulează în paralel.
 - proiectul este orientat pe portabilitate între local și Colab.
 - notebook-ul curent este o variantă rapidă de pornire, iar `README.md` descrie fluxul complet al proiectului.

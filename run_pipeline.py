@@ -72,6 +72,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force-extract", action="store_true")
     parser.add_argument("--model-name", default="openai/whisper-base")
     parser.add_argument("--prep-limit", type=int)
+    parser.add_argument("--prep-num-workers", type=int, default=1)
+    parser.add_argument("--prep-chunksize", type=int, default=1)
     parser.add_argument("--train-limit", type=int)
     parser.add_argument("--eval-limit", type=int)
     parser.add_argument("--skip-audio-normalization", action="store_true")
@@ -120,6 +122,7 @@ def main() -> None:
         prep_command.append("--skip-audio-normalization")
     if args.prep_limit:
         prep_command.extend(["--limit-per-split", str(args.prep_limit)])
+    prep_command.extend(["--num-workers", str(args.prep_num_workers), "--chunksize", str(args.prep_chunksize)])
     LOGGER.info("Etapa 1/3: pregătire date.")
     with log_path.open("a", encoding="utf-8") as log_handle:
         run_command(prep_command, log_handle)
