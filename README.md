@@ -112,6 +112,12 @@ Pentru paralelizarea pregătirii datelor, poți adăuga:
 python run_pipeline.py --dataset-cache-dir "artifacts/datasets" --freeze-encoder --prep-num-workers 4 --prep-chunksize 2
 ```
 
+Pentru folosirea automată a tuturor workerilor disponibili:
+
+```powershell
+python run_pipeline.py --dataset-cache-dir "artifacts/datasets" --freeze-encoder --prep-num-workers -1
+```
+
 ### Pipeline complet pe subset mic
 
 Util pentru verificare rapidă pe CPU sau pentru un smoke test:
@@ -140,6 +146,12 @@ Pentru paralelizare la nivel de pregătire audio:
 
 ```powershell
 python -m asr_ro.data_prep --dataset-root "<dataset_root_afisat_de_dataset_api>" --output-root "artifacts/cv_ro" --num-workers 4 --chunksize 2
+```
+
+Pentru selectare automată a tuturor workerilor disponibili:
+
+```powershell
+python -m asr_ro.data_prep --dataset-root "<dataset_root_afisat_de_dataset_api>" --output-root "artifacts/cv_ro" --num-workers -1
 ```
 
 ### 2. Fine-tuning
@@ -194,6 +206,7 @@ Pregătirea datelor poate rula secvențial sau paralel:
 
 - `--num-workers 1` păstrează comportamentul secvențial și este opțiunea cea mai sigură pentru debugging;
 - `--num-workers > 1` activează worker-i multiproces pentru conversia/copierea audio;
+- `--num-workers -1` selectează automat toți workerii CPU disponibili;
 - `--chunksize` controlează câte task-uri sunt trimise unui worker într-un lot.
 
 La fiecare rulare a lui `run_pipeline.py` se creează automat un fișier de log unic:

@@ -1,7 +1,9 @@
 import csv
 from pathlib import Path
 
-from asr_ro.data_prep import prepare_split_manifest
+import pytest
+
+from asr_ro.data_prep import prepare_split_manifest, resolve_num_workers
 
 
 def write_tsv(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> None:
@@ -240,3 +242,76 @@ def test_prepare_split_manifest_counts_failed_parallel_items(tmp_path: Path) -> 
     assert summary["examples"] == 0
     assert summary["skipped_failed"] == 1
     assert rows == []
+
+
+def test_resolve_num_workers_auto_uses_cpu_count(monkeypatch) -> None:
+    monkeypatch.setattr("asr_ro.data_prep.os.cpu_count", lambda: 8)
+
+    assert resolve_num_workers(-1) == 8
+
+
+def test_resolve_num_workers_rejects_zero() -> None:
+    with pytest.raises(ValueError):
+        resolve_num_workers(0)
+
+
+def test_prepare_split_manifest_auto_workers_reports_resolved_value(tmp_path: Path) -> None:
+    dataset_root = tmp_path / "dataset"
+    clips_dir = dataset_root / "ro" / "clips"
+    clips_dir.mkdir(parents=True)
+
+    clip_path = clips_dir / "sample.mp3"
+    clip_path.write_bytes(b"fake mp3")
+
+    write_tsv(
+        dataset_root / "ro" / "clip_durations.tsv",
+        [{"clip": "sample.mp3", "duration[ms]": "1200"}],
+        ["clip", "duration[ms]"],
+    )
+    write_tsv(
+        dataset_root / "ro" / "train.tsv",
+        [
+            {
+                "client_id": "speaker-1",
+                "path": "sample.mp3",
+                "sentence_id": "sent-1",
+                "sentence": "Salut auto",
+                "sentence_domain": "",
+                "up_votes": "2",
+                "down_votes": "0",
+                "age": "",
+                "gender": "",
+                "accents": "",
+                "variant": "",
+                "locale": "ro",
+                "segment": "",
+            }
+        ],
+        [
+            "client_id",
+            "path",
+            "sentence_id",
+            "sentence",
+            "sentence_domain",
+            "up_votes",
+            "down_votes",
+            "age",
+            "gender",
+            "accents",
+            "variant",
+            "locale",
+            "segment",
+        ],
+    )
+
+    output_root = tmp_path / "artifacts"
+    summary = prepare_split_manifest(
+        dataset_root=dataset_root,
+        output_root=output_root,
+        split="train",
+        normalize_audio=False,
+        num_workers=-1,
+    )
+
+    assert summary["examples"] == 1
+    assert summary["num_workers"] >= 1

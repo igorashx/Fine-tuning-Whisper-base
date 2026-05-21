@@ -44,6 +44,15 @@ class PreparationResult:
     error: str | None = None
 
 
+def resolve_num_workers(num_workers: int) -> int:
+    if num_workers == -1:
+        available_cpus = os.cpu_count() or 1
+        return max(1, available_cpus)
+    if num_workers < 1:
+        raise ValueError("`num_workers` trebuie să fie 1, mai mare decât 1 sau -1 pentru auto.")
+    return num_workers
+
+
 def read_clip_durations(dataset_root: Path) -> dict[str, int]:
     durations_path = dataset_root / "ro" / "clip_durations.tsv"
     durations: dict[str, int] = {}
@@ -185,17 +194,16 @@ def iter_preparation_results(
     num_workers: int,
     chunksize: int,
 ):
-    if num_workers < 1:
-        raise ValueError("`num_workers` trebuie să fie cel puțin 1.")
+    resolved_num_workers = resolve_num_workers(num_workers)
     if chunksize < 1:
         raise ValueError("`chunksize` trebuie să fie cel puțin 1.")
 
-    if num_workers == 1:
+    if resolved_num_workers == 1:
         for task in tqdm(tasks, total=len(tasks), desc=f"Pregătire {split}", unit="exemplu", leave=True):
             yield prepare_audio_task(task)
         return
 
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+    with ProcessPoolExecutor(max_workers=resolved_num_workers) as executor:
         mapped_results = executor.map(prepare_audio_task, tasks, chunksize=chunksize)
         for result in tqdm(mapped_results, total=len(tasks), desc=f"Pregătire {split}", unit="exemplu", leave=True):
             yield result
@@ -214,6 +222,7 @@ def prepare_split_manifest(
     chunksize: int = 1,
 ) -> dict[str, object]:
     LOGGER.info("Pregătesc split-ul `%s` din `%s`.", split, dataset_root)
+    resolved_num_workers = resolve_num_workers(num_workers)
     tasks, skipped_missing, skipped_duration = build_preparation_tasks(
         dataset_root=dataset_root,
         output_root=output_root,
@@ -231,10 +240,10 @@ def prepare_split_manifest(
         "Split `%s`: %s task-uri eligibile, `%s` workeri, `chunksize=%s`.",
         split,
         len(tasks),
-        num_workers,
+        resolved_num_workers,
         chunksize,
     )
-    for result in iter_preparation_results(tasks, split=split, num_workers=num_workers, chunksize=chunksize):
+    for result in iter_preparation_results(tasks, split=split, num_workers=resolved_num_workers, chunksize=chunksize):
         if result.status == "ok" and result.audio_path and result.text is not None:
             manifest_rows.append(ManifestRow(audio_path=result.audio_path, text=result.text))
             continue
@@ -263,7 +272,7 @@ def prepare_split_manifest(
         "manifest_path": str(manifest_path.resolve()),
         "audio_root": str(output_root.resolve()),
         "normalize_audio": normalize_audio,
-        "num_workers": num_workers,
+        "num_workers": resolved_num_workers,
     }
     LOGGER.info(
         "Split `%s` gata: %s exemple, %s lipsă, %s filtrate după durată, %s eșuate.",
