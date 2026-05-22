@@ -51,6 +51,7 @@ Acest lucru face artefactele portabile între Windows, Linux și Colab.
 
 - Python `3.12+`;
 - pachetele din `requirements.txt`;
+- `Git LFS`, dacă vrei să descarci checkpoint-ul fine-tuned versionat în repo;
 - `ffmpeg` în `PATH` sau fallback-ul oferit de `imageio-ffmpeg`;
 - cheie API Mozilla Data Collective disponibilă prin variabilă de mediu;
 - GPU recomandat pentru antrenare; CPU este suportat, dar mult mai lent.
@@ -67,6 +68,19 @@ python -m pip install -r requirements.txt
 ```
 
 Dacă folosești alt shell sau alt sistem de operare, activează mediul virtual cu comanda specifică platformei tale.
+
+## Modelul fine-tuned din repo și Git LFS
+
+Checkpoint-ul fine-tuned versionat în `artifacts/whisper-base-ro/model.safetensors` este stocat prin `Git LFS`, nu ca blob Git obișnuit.
+
+Dacă ai clonat repo-ul și vrei să descarci și greutățile versionate, rulează în rădăcina proiectului:
+
+```powershell
+git lfs install
+git lfs pull
+```
+
+Dacă rulezi training-ul de la zero și nu ai nevoie de checkpoint-ul deja versionat, poți ignora acest pas.
 
 ## Configurarea cheii API
 
@@ -195,6 +209,8 @@ Fluxul actual din notebook este:
 - instalează dependențele;
 - rulează `run_pipeline.py`.
 
+Dacă vrei să folosești în Colab checkpoint-ul fine-tuned deja versionat în repo, rulează suplimentar `git lfs install` și `git lfs pull` după clonare.
+
 Înainte de a executa celula de pipeline din notebook, trebuie să introduci cheia API în locul șirului gol din comandă sau să setezi variabila de mediu în sesiunea Colab.
 
 Exemplu de comandă Colab:
@@ -262,6 +278,7 @@ Cele mai importante rezultate apar în:
 - `artifacts/cv_ro/manifests/test.csv`
 - `artifacts/cv_ro/manifests/summary.json`
 - `artifacts/whisper-base-ro/`
+- `artifacts/whisper-base-ro/model.safetensors` — checkpoint versionat prin `Git LFS`
 - `artifacts/whisper-base-ro/training_summary.json`
 - `artifacts/evaluation/comparison.json`
 
@@ -292,6 +309,8 @@ python -m pytest tests -q
 - dacă `run_pipeline.py` nu găsește cheia API, verifică variabila `MOZILLA_DATA_COLLECTIVE_API_KEY` în sesiunea curentă.
 - dacă rulezi pe CPU, folosește subsete mici prin `--prep-limit`, `--train-limit` și `--eval-limit`.
 - dacă paralelizarea nu ajută sau încetinește, redu `--prep-num-workers`; pe HDD prea mulți workeri pot satura I/O.
+- dacă `artifacts/whisper-base-ro/model.safetensors` lipsește după clone, rulează `git lfs install` și `git lfs pull`.
+- dacă vezi în `model.safetensors` un fișier text scurt care începe cu `version https://git-lfs.github.com/spec/v1`, checkout-ul a fost făcut fără a descărca obiectul LFS; rulează `git lfs pull`.
 - pe Windows, paralelizarea folosește procese separate; evită valori exagerate pentru `--prep-num-workers` și începe cu `2-4`.
 - pentru validare și evaluare pe un singur GPU, începe cu `--validation-num-workers 2` și `--test-num-workers 2`; valori mai mari nu garantează accelerare.
 - nu paraleliza inferența pentru baseline și fine-tuned pe același GPU; proiectul paralelizează doar I/O-ul și pregătirea batch-urilor.
