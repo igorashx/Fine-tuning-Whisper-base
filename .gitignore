@@ -2,5 +2,4 @@
 .env.*
 __pycache__/
 *.pyc
-artifacts/whisper-base-ro/model.safetensors
 
