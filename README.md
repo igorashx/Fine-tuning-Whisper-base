@@ -2,7 +2,7 @@
 
 Acest proiect descarcă `Common Voice Romanian` prin API-ul Mozilla Data Collective, pregătește datele pentru `openai/whisper-base`, face fine-tuning pe split-urile oficiale `train/dev/test` și compară modelul rezultat cu baseline-ul preantrenat folosind `WER` și `CER`.
 
-Dataset sursă: `https://mozilladatacollective.com/datasets/cmn2e8rmi01l6mm07vxurptse`
+Dataset sursă: `[https://mozilladatacollective.com/datasets/cmn2e8rmi01l6mm07vxurptse](https://mozilladatacollective.com/datasets/cmn2e8rmi01l6mm07vxurptse)`
 
 ## Scop
 
