@@ -1,0 +1,70 @@
+{
+  "device": "cuda",
+  "samples": 3946,
+  "baseline_model": "openai/whisper-base",
+  "fine_tuned_model": "artifacts/whisper-base-ro",
+  "baseline_metrics": {
+    "wer": 0.6576667478515014,
+    "cer": 0.19630278020924513
+  },
+  "fine_tuned_metrics": {
+    "wer": 0.41146793778922097,
+    "cer": 0.12723521320495185
+  },
+  "improvement": {
+    "wer": 0.2461988100622804,
+    "cer": 0.06906756700429328
+  },
+  "examples": [
+    {
+      "reference": "Domnia sa poate să-şi apere drepturile sale presupuse.",
+      "baseline_prediction": " Domnia s-a patit sa-și apere drepturi le sale presupuse.",
+      "fine_tuned_prediction": "Domnia s-a patit să șapere drepturile sale presupuse."
+    },
+    {
+      "reference": "Avem, însă, și o responsabilitate europeană.",
+      "baseline_prediction": " Avem un să șiu o responsabilitate oropano.",
+      "fine_tuned_prediction": "Avem însă și o responsabilitate europană."
+    },
+    {
+      "reference": "Acum am depus două amendamente în plen.",
+      "baseline_prediction": " Acum a indepust o amendament in plan.",
+      "fine_tuned_prediction": "Acum a îndepostoament de într-un plen."
+    },
+    {
+      "reference": "Iti mai amintesti?",
+      "baseline_prediction": " Atumai amintești.",
+      "fine_tuned_prediction": "Îti mai amintești?"
+    },
+    {
+      "reference": "Mica afacere a tatălui meu rămâne mică.",
+      "baseline_prediction": " Mi-ca faci reatată lui meu, rămâne mi-ca.",
+      "fine_tuned_prediction": "Mica a face reatată lui meu rămâne mică."
+    },
+    {
+      "reference": "Cred că pentru noi este o poziţie onorabilă.",
+      "baseline_prediction": " Cred că pentru noi este o positii honorabila.",
+      "fine_tuned_prediction": "Cred că pentru noi este o poziţie onorabilă."
+    },
+    {
+      "reference": "Spun un \"nu\" răspicat, atunci, acestui raport.",
+      "baseline_prediction": " Spun un înnu respicat atunci acestui rapor.",
+      "fine_tuned_prediction": "Spun un înnu rispica atunci acestui raport."
+    },
+    {
+      "reference": "Acum, din cauza acestei directive, au pierdut totul.",
+      "baseline_prediction": " Acum din cauza chesteidirea au perdut totul.",
+      "fine_tuned_prediction": "Acum, din cauza ce este directivă, au pierdut totul."
+    },
+    {
+      "reference": "Închis în două mii nouă cu neînceperea urmăririi penale.",
+      "baseline_prediction": " Închisun 2009, cu ne începele urmării din penale.",
+      "fine_tuned_prediction": "Închii sunt două mii nouă cunenci epre urmării ipenale."
+    },
+    {
+      "reference": "Aşadar, numărul de automobile trebuie redus.",
+      "baseline_prediction": " Așa dar numărul de automovile tribuie redus.",
+      "fine_tuned_prediction": "Așadar, numărul de automovile trebuie redus."
+    }
+  ]
+}
